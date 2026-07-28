@@ -7,7 +7,9 @@ from manufacturing_test_runner.simulators.base import (
 from manufacturing_test_runner.simulators.power_supply import (
     SimulatedPowerSupply,
 )
-
+from manufacturing_test_runner.simulators.frequency_counter import (
+    SimulatedFrequencyCounter,
+)
 
 def test_power_supply_connects_and_disconnects() -> None:
     supply = SimulatedPowerSupply()
@@ -84,3 +86,74 @@ def test_power_supply_disconnect_disables_output() -> None:
 
     assert not reading.output_enabled
     assert reading.voltage == 0.0
+
+def test_frequency_counter_measures_enabled_input() -> None:
+    counter = SimulatedFrequencyCounter(
+        base_frequency_hz=10_000_000.0,
+        noise_hz=1.0,
+        seed=1,
+    )
+    counter.connect()
+    counter.enable_input()
+
+    reading = counter.measure()
+
+    assert reading.target_hz == 10_000_000.0
+    assert 9_999_999.0 <= reading.frequency_hz <= 10_000_001.0
+    assert reading.error_hz == (
+        reading.frequency_hz - reading.target_hz
+    )
+
+
+def test_frequency_counter_requires_enabled_input() -> None:
+    counter = SimulatedFrequencyCounter()
+    counter.connect()
+
+    with pytest.raises(
+        SimulatorError,
+        match="input is not enabled",
+    ):
+        counter.measure()
+
+
+def test_frequency_counter_supports_forced_reading() -> None:
+    counter = SimulatedFrequencyCounter()
+    counter.connect()
+    counter.enable_input()
+    counter.force_reading(9_999_950.0)
+
+    reading = counter.measure(
+        target_hz=10_000_000.0,
+    )
+
+    assert reading.frequency_hz == 9_999_950.0
+    assert reading.error_hz == -50.0
+    assert reading.error_ppm == -5.0
+
+
+def test_frequency_counter_rejects_invalid_forced_reading() -> None:
+    counter = SimulatedFrequencyCounter()
+    counter.connect()
+
+    with pytest.raises(
+        SimulatorError,
+        match="greater than zero",
+    ):
+        counter.force_reading(0.0)
+
+
+def test_frequency_counter_disconnect_clears_forced_reading() -> None:
+    counter = SimulatedFrequencyCounter()
+    counter.connect()
+    counter.enable_input()
+    counter.force_reading(9_000_000.0)
+
+    counter.disconnect()
+    counter.connect()
+    counter.enable_input()
+
+    reading = counter.measure(
+        target_hz=10_000_000.0,
+    )
+
+    assert reading.frequency_hz != 9_000_000.0
