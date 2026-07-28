@@ -31,27 +31,70 @@ class ControllerFunctionalTestProcedure(BaseProcedure):
         *,
         serial_device: SimulatedSerialDevice | None = None,
         limits: ControllerTestLimits | None = None,
+        demo_mode: str = "pass",
         message_callback=None,
+        step_delay_seconds: float = 0.0,
     ) -> None:
-        super().__init__(message_callback=message_callback)
-
-        self.serial_device = (
-            serial_device or SimulatedSerialDevice()
+        super().__init__(
+            message_callback=message_callback,
+            step_delay_seconds=step_delay_seconds,
         )
+
+        if demo_mode not in {
+            "pass",
+            "fail",
+            "retry",
+            "timeout",
+        }:
+            raise ValueError(
+                "Unsupported controller demonstration mode."
+            )
+
+        self.demo_mode = demo_mode
         self.limits = limits or ControllerTestLimits()
 
+        if serial_device is not None:
+            self.serial_device = serial_device
+        elif demo_mode == "fail":
+            self.serial_device = SimulatedSerialDevice(
+                responses={
+                    "SELFTEST": "FAIL",
+                }
+            )
+        elif demo_mode == "retry":
+            self.serial_device = SimulatedSerialDevice(
+                transient_failures={
+                    "STATUS?": 1,
+                }
+            )
+        elif demo_mode == "timeout":
+            self.serial_device = SimulatedSerialDevice(
+                timeout_commands={
+                    "SELFTEST",
+                },
+                response_delay_seconds=0.5,
+            )
+        else:
+            self.serial_device = SimulatedSerialDevice()
+
     def run(self) -> ProcedureResult:
-        measurements: dict[str, float | str | bool] = {}
+        measurements: dict[str, float | str | bool] = {
+            "demo_mode": self.demo_mode,
+        }
         errors: list[str] = []
 
         self.check_abort()
 
-        self.emit("Connecting to simulated serial controller.")
+        self.emit("Opening simulated serial connection.")
+        self.pause()
         self.serial_device.connect()
 
-        self.check_abort()
+        self.emit("Serial connection established.")
+        self.pause()
 
         self.emit("Requesting controller identification.")
+        self.pause()
+
         identification = self.serial_device.send_command(
             "IDN?",
             retries=self.limits.retries,
@@ -67,6 +110,7 @@ class ControllerFunctionalTestProcedure(BaseProcedure):
             "Controller identification: "
             f"{identification.response}"
         )
+        self.pause()
 
         if self.limits.expected_model not in identification.response:
             errors.append(
@@ -74,9 +118,9 @@ class ControllerFunctionalTestProcedure(BaseProcedure):
                 f"expected model {self.limits.expected_model}."
             )
 
-        self.check_abort()
-
         self.emit("Requesting controller status.")
+        self.pause()
+
         status = self.serial_device.send_command(
             "STATUS?",
             retries=self.limits.retries,
@@ -86,7 +130,15 @@ class ControllerFunctionalTestProcedure(BaseProcedure):
         measurements["status"] = status.response
         measurements["status_attempts"] = status.attempt_count
 
+        if status.attempt_count > 1:
+            self.emit(
+                "Initial status request failed; communication "
+                f"recovered on attempt {status.attempt_count}."
+            )
+            self.pause()
+
         self.emit(f"Controller status: {status.response}")
+        self.pause()
 
         if status.response != self.limits.expected_status:
             errors.append(
@@ -95,9 +147,9 @@ class ControllerFunctionalTestProcedure(BaseProcedure):
                 f"{self.limits.expected_status}."
             )
 
-        self.check_abort()
+        self.emit("Starting internal controller self-test.")
+        self.pause()
 
-        self.emit("Running controller self-test.")
         self_test = self.serial_device.send_command(
             "SELFTEST",
             retries=self.limits.retries,
@@ -109,7 +161,10 @@ class ControllerFunctionalTestProcedure(BaseProcedure):
             self_test.attempt_count
         )
 
-        self.emit(f"Controller self-test result: {self_test.response}")
+        self.emit(
+            f"Controller self-test result: {self_test.response}"
+        )
+        self.pause()
 
         if self_test.response != self.limits.expected_self_test:
             errors.append(
@@ -118,7 +173,8 @@ class ControllerFunctionalTestProcedure(BaseProcedure):
                 f"{self.limits.expected_self_test}."
             )
 
-        self.check_abort()
+        self.emit("Evaluating controller test results.")
+        self.pause()
 
         if errors:
             self.emit("Controller functional test failed.")

@@ -36,9 +36,20 @@ class SensorCalibrationProcedure(BaseProcedure):
         power_supply: SimulatedPowerSupply | None = None,
         frequency_counter: SimulatedFrequencyCounter | None = None,
         limits: CalibrationLimits | None = None,
+        demo_mode: str = "pass",
         message_callback=None,
+        step_delay_seconds: float = 0.0,
     ) -> None:
-        super().__init__(message_callback=message_callback)
+        super().__init__(
+            message_callback=message_callback,
+            step_delay_seconds=step_delay_seconds,
+        )
+
+        if demo_mode not in {"pass", "fail"}:
+            raise ValueError(
+                "Sensor calibration demo mode must be "
+                "'pass' or 'fail'."
+            )
 
         self.power_supply = (
             power_supply or SimulatedPowerSupply()
@@ -47,34 +58,48 @@ class SensorCalibrationProcedure(BaseProcedure):
             frequency_counter or SimulatedFrequencyCounter()
         )
         self.limits = limits or CalibrationLimits()
+        self.demo_mode = demo_mode
 
     def run(self) -> ProcedureResult:
         measurements: dict[str, float | str | bool] = {}
         errors: list[str] = []
 
+        measurements["demo_mode"] = self.demo_mode
+
         self.check_abort()
 
         self.emit("Connecting to simulated power supply.")
+        self.pause()
         self.power_supply.connect()
 
+        self.emit("Power supply connected.")
+        self.pause()
+
         self.emit("Connecting to simulated frequency counter.")
+        self.pause()
         self.frequency_counter.connect()
 
-        self.check_abort()
+        self.emit("Frequency counter connected.")
+        self.pause()
 
         self.emit(
             "Configuring power supply to "
             f"{self.limits.supply_voltage_v:g} V with "
             f"{self.limits.current_limit_a:g} A current limit."
         )
+        self.pause()
 
         self.power_supply.configure(
             voltage=self.limits.supply_voltage_v,
             current_limit=self.limits.current_limit_a,
         )
 
+        self.emit("Enabling power-supply output.")
+        self.pause()
         self.power_supply.enable_output()
-        self.emit("Power-supply output enabled.")
+
+        self.emit("Allowing unit under test to stabilize.")
+        self.pause()
 
         power_reading = self.power_supply.measure()
 
@@ -90,6 +115,7 @@ class SensorCalibrationProcedure(BaseProcedure):
             f"{power_reading.voltage:.3f} V, "
             f"{power_reading.current:.3f} A."
         )
+        self.pause()
 
         if not (
             self.limits.minimum_current_a
@@ -103,10 +129,28 @@ class SensorCalibrationProcedure(BaseProcedure):
                 f"{self.limits.maximum_current_a:.3f} A."
             )
 
-        self.check_abort()
-
+        self.emit("Enabling frequency-counter input.")
+        self.pause()
         self.frequency_counter.enable_input()
-        self.emit("Frequency-counter input enabled.")
+
+        if self.demo_mode == "fail":
+            forced_frequency = (
+                self.limits.target_frequency_hz
+                * (1.0 + 25.0 / 1_000_000.0)
+            )
+
+            self.frequency_counter.force_reading(
+                forced_frequency
+            )
+
+            self.emit(
+                "Demonstration fault injected: oscillator "
+                "frequency shifted outside tolerance."
+            )
+            self.pause()
+
+        self.emit("Acquiring oscillator frequency.")
+        self.pause()
 
         frequency_reading = self.frequency_counter.measure(
             target_hz=self.limits.target_frequency_hz
@@ -127,6 +171,7 @@ class SensorCalibrationProcedure(BaseProcedure):
             f"{frequency_reading.frequency_hz:.3f} Hz "
             f"({frequency_reading.error_ppm:.3f} ppm)."
         )
+        self.pause()
 
         if (
             abs(frequency_reading.error_ppm)
@@ -139,7 +184,8 @@ class SensorCalibrationProcedure(BaseProcedure):
                 f"{self.limits.maximum_frequency_error_ppm:.3f} ppm."
             )
 
-        self.check_abort()
+        self.emit("Evaluating recorded measurements.")
+        self.pause()
 
         if errors:
             self.emit("Calibration failed.")

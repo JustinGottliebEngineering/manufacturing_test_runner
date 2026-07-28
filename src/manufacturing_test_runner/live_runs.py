@@ -47,6 +47,7 @@ class LiveRun:
     procedure_name: str
     work_order: str
     serial_number: str
+    demo_mode: str
     created_at: float = field(default_factory=time)
     result: ProcedureResult | None = None
     completed: bool = False
@@ -57,6 +58,7 @@ class LiveRun:
         default_factory=list,
         repr=False,
     )
+
     _condition: Condition = field(
         default_factory=Condition,
         repr=False,
@@ -98,7 +100,9 @@ class LiveRun:
         timeout_seconds: float = 15.0,
     ) -> list[LiveEvent]:
         with self._condition:
-            available_events = self._events[after_event_id:]
+            available_events = self._events[
+                after_event_id:
+            ]
 
             if available_events:
                 return list(available_events)
@@ -108,7 +112,9 @@ class LiveRun:
 
             self._condition.wait(timeout_seconds)
 
-            return list(self._events[after_event_id:])
+            return list(
+                self._events[after_event_id:]
+            )
 
 
 class LiveRunManager:
@@ -117,8 +123,16 @@ class LiveRunManager:
     def __init__(
         self,
         procedure_runner: ProcedureRunner,
+        *,
+        step_delay_seconds: float = 0.65,
     ) -> None:
+        if step_delay_seconds < 0:
+            raise ValueError(
+                "step_delay_seconds cannot be negative."
+            )
+
         self._procedure_runner = procedure_runner
+        self._step_delay_seconds = step_delay_seconds
         self._runs: dict[str, LiveRun] = {}
         self._state_lock = Lock()
         self._active_run_id: str | None = None
@@ -129,7 +143,10 @@ class LiveRunManager:
         with self._state_lock:
             return self._active_run_id
 
-    def get_run(self, run_id: str) -> LiveRun:
+    def get_run(
+        self,
+        run_id: str,
+    ) -> LiveRun:
         with self._state_lock:
             run = self._runs.get(run_id)
 
@@ -140,7 +157,9 @@ class LiveRunManager:
 
         return run
 
-    def get_latest_completed_run(self) -> LiveRun | None:
+    def get_latest_completed_run(
+        self,
+    ) -> LiveRun | None:
         with self._state_lock:
             run_id = self._latest_completed_run_id
 
@@ -155,12 +174,38 @@ class LiveRunManager:
         procedure_id: str,
         work_order: str,
         serial_number: str,
+        demo_mode: str = "pass",
     ) -> LiveRun:
         definition = (
-            self._procedure_runner.get_procedure_definition(
+            self._procedure_runner
+            .get_procedure_definition(
                 procedure_id
             )
         )
+
+        allowed_modes = {
+            "sensor_calibration": {
+                "pass",
+                "fail",
+            },
+            "controller_functional_test": {
+                "pass",
+                "fail",
+                "retry",
+                "timeout",
+            },
+        }
+
+        procedure_modes = allowed_modes.get(
+            definition.procedure_id,
+            {"pass"},
+        )
+
+        if demo_mode not in procedure_modes:
+            raise LiveRunError(
+                f"Demonstration mode '{demo_mode}' is not "
+                f"available for {definition.display_name}."
+            )
 
         with self._state_lock:
             if self._active_run_id is not None:
@@ -183,6 +228,7 @@ class LiveRunManager:
                 procedure_name=definition.display_name,
                 work_order=work_order,
                 serial_number=serial_number,
+                demo_mode=demo_mode,
             )
 
             self._runs[run.run_id] = run
@@ -194,11 +240,15 @@ class LiveRunManager:
             name=f"procedure-{run.run_id}",
             daemon=True,
         )
+
         thread.start()
 
         return run
 
-    def rerun(self, run_id: str) -> LiveRun:
+    def rerun(
+        self,
+        run_id: str,
+    ) -> LiveRun:
         previous_run = self.get_run(run_id)
 
         if not previous_run.completed:
@@ -211,9 +261,13 @@ class LiveRunManager:
             procedure_id=previous_run.procedure_id,
             work_order=previous_run.work_order,
             serial_number=previous_run.serial_number,
+            demo_mode=previous_run.demo_mode,
         )
 
-    def request_abort(self, run_id: str) -> bool:
+    def request_abort(
+        self,
+        run_id: str,
+    ) -> bool:
         run = self.get_run(run_id)
 
         if run.completed:
@@ -225,19 +279,27 @@ class LiveRunManager:
 
         run.abort_requested = True
 
-        requested = self._procedure_runner.request_abort()
+        requested = (
+            self._procedure_runner.request_abort()
+        )
 
         if requested:
             run.publish(
                 "abort_requested",
                 {
-                    "message": "Abort request sent to the active procedure."
+                    "message": (
+                        "Abort request sent to the active "
+                        "procedure."
+                    )
                 },
             )
 
         return requested
 
-    def _execute_run(self, run: LiveRun) -> None:
+    def _execute_run(
+        self,
+        run: LiveRun,
+    ) -> None:
         run.publish(
             "run_started",
             {
@@ -246,6 +308,7 @@ class LiveRunManager:
                 "procedure_name": run.procedure_name,
                 "work_order": run.work_order,
                 "serial_number": run.serial_number,
+                "demo_mode": run.demo_mode,
             },
         )
 
@@ -258,12 +321,20 @@ class LiveRunManager:
                         message,
                     )
                 ),
+                procedure_options={
+                    "demo_mode": run.demo_mode,
+                    "step_delay_seconds": (
+                        self._step_delay_seconds
+                    ),
+                },
             )
 
             run.publish(
                 "result",
                 {
-                    "procedure_name": result.procedure_name,
+                    "procedure_name": (
+                        result.procedure_name
+                    ),
                     "status": result.status.value,
                     "passed": result.passed,
                     "measurements": result.measurements,
@@ -279,6 +350,7 @@ class LiveRunManager:
             )
 
             run.finish(result=result)
+
         except ProcedureRunnerError as exc:
             message = str(exc)
 
@@ -296,7 +368,10 @@ class LiveRunManager:
                 },
             )
 
-            run.finish(execution_error=message)
+            run.finish(
+                execution_error=message
+            )
+
         except Exception as exc:
             message = (
                 "Unexpected live execution error: "
@@ -317,13 +392,18 @@ class LiveRunManager:
                 },
             )
 
-            run.finish(execution_error=message)
+            run.finish(
+                execution_error=message
+            )
+
         finally:
             with self._state_lock:
                 if self._active_run_id == run.run_id:
                     self._active_run_id = None
 
-                self._latest_completed_run_id = run.run_id
+                self._latest_completed_run_id = (
+                    run.run_id
+                )
 
     @staticmethod
     def _publish_procedure_message(
@@ -333,7 +413,9 @@ class LiveRunManager:
         run.publish(
             "procedure_message",
             {
-                "elapsed_seconds": message.elapsed_seconds,
+                "elapsed_seconds": (
+                    message.elapsed_seconds
+                ),
                 "message": message.message,
             },
         )

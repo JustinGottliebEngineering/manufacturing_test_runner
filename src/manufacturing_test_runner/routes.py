@@ -30,6 +30,8 @@ bp = Blueprint("main", __name__)
 
 
 def get_runner() -> ProcedureRunner:
+    """Return the application-level procedure runner."""
+
     runner = current_app.extensions.get(
         "procedure_runner"
     )
@@ -43,6 +45,8 @@ def get_runner() -> ProcedureRunner:
 
 
 def get_live_run_manager() -> LiveRunManager:
+    """Return the application-level live run manager."""
+
     manager = current_app.extensions.get(
         "live_run_manager"
     )
@@ -56,6 +60,8 @@ def get_live_run_manager() -> LiveRunManager:
 
 
 def find_live_run(run_id: str) -> LiveRun:
+    """Find a live run or return HTTP 404."""
+
     try:
         return get_live_run_manager().get_run(run_id)
     except LiveRunError:
@@ -73,6 +79,7 @@ def setup() -> str:
             "work_order": "",
             "serial_number": "",
             "procedure_id": "",
+            "demo_mode": "pass",
         },
         error=None,
     )
@@ -98,10 +105,16 @@ def run_procedure():
         "",
     ).strip()
 
+    demo_mode = request.form.get(
+        "demo_mode",
+        "pass",
+    ).strip()
+
     form_data = {
         "work_order": work_order,
         "serial_number": serial_number,
         "procedure_id": procedure_id,
+        "demo_mode": demo_mode,
     }
 
     error: str | None = None
@@ -112,6 +125,8 @@ def run_procedure():
         error = "Serial number is required."
     elif not procedure_id:
         error = "Test procedure is required."
+    elif not demo_mode:
+        error = "Demonstration scenario is required."
 
     if error is not None:
         return (
@@ -129,6 +144,7 @@ def run_procedure():
             procedure_id=procedure_id,
             work_order=work_order,
             serial_number=serial_number,
+            demo_mode=demo_mode,
         )
     except (
         LiveRunError,
@@ -262,6 +278,7 @@ def rerun_live_run(run_id: str):
                     "work_order": "",
                     "serial_number": "",
                     "procedure_id": "",
+                    "demo_mode": "pass",
                 },
                 error=str(exc),
             ),

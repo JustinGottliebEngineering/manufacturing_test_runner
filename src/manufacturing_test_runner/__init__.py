@@ -14,18 +14,37 @@ def create_app(
 ) -> Flask:
     """Create and configure the Flask application."""
 
-    app = Flask(__name__, instance_relative_config=True)
+    app = Flask(
+        __name__,
+        instance_relative_config=True,
+    )
 
     app.config.from_mapping(
         SECRET_KEY="development-only-secret",
         TESTING=False,
+        LIVE_STEP_DELAY_SECONDS=0.65,
     )
 
     if test_config is not None:
         app.config.update(test_config)
 
+    if (
+        app.config["TESTING"]
+        and (
+            test_config is None
+            or "LIVE_STEP_DELAY_SECONDS" not in test_config
+        )
+    ):
+        app.config["LIVE_STEP_DELAY_SECONDS"] = 0.0
+
     procedure_runner = ProcedureRunner()
-    live_run_manager = LiveRunManager(procedure_runner)
+
+    live_run_manager = LiveRunManager(
+        procedure_runner,
+        step_delay_seconds=float(
+            app.config["LIVE_STEP_DELAY_SECONDS"]
+        ),
+    )
 
     app.extensions["procedure_runner"] = procedure_runner
     app.extensions["live_run_manager"] = live_run_manager

@@ -53,6 +53,10 @@ body {
     text-decoration: none;
 }
 
+.site-nav a:hover {
+    text-decoration: underline;
+}
+
 main.page-shell {
     padding-top: 28px;
     padding-bottom: 48px;
@@ -102,7 +106,23 @@ select {
     padding: 12px;
     border: 1px solid #aebdd0;
     border-radius: 6px;
+    background: white;
     font: inherit;
+}
+
+input:focus,
+select:focus {
+    border-color: #1768ac;
+    outline: 2px solid rgb(23 104 172 / 18%);
+}
+
+select option:disabled {
+    color: #8a96a8;
+}
+
+.field-help {
+    color: #64748b;
+    line-height: 1.4;
 }
 
 .button {
@@ -121,9 +141,31 @@ select {
     background: #1768ac;
 }
 
+.button-primary:hover:not(:disabled) {
+    background: #12568f;
+}
+
 .button-secondary {
     color: #163b65;
     background: #dce8f4;
+}
+
+.button-secondary:hover {
+    background: #cadced;
+}
+
+.button-danger {
+    color: white;
+    background: #a32626;
+}
+
+.button-danger:hover:not(:disabled) {
+    background: #861e1e;
+}
+
+.button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
 }
 
 .button-row {
@@ -139,12 +181,33 @@ select {
     align-items: flex-start;
 }
 
+.section-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    align-items: center;
+}
+
+.run-identifier {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.run-identifier code {
+    overflow-wrap: anywhere;
+}
+
 .status {
     min-width: 120px;
     padding: 10px 16px;
     border-radius: 999px;
     text-align: center;
     font-weight: 700;
+}
+
+.status-running {
+    color: #174b75;
+    background: #dcecf8;
 }
 
 .status-passed {
@@ -159,7 +222,18 @@ select {
     background: #f7dada;
 }
 
+.connection-state {
+    color: #64748b;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.connection-state-live {
+    color: #14703b;
+}
+
 .console-output {
+    min-height: 260px;
     max-height: 420px;
     overflow: auto;
     padding: 18px;
@@ -171,6 +245,18 @@ select {
         "Courier New",
         monospace;
     line-height: 1.55;
+}
+
+.console-system {
+    color: #8dc8ff;
+}
+
+.console-warning {
+    color: #ffd479;
+}
+
+.console-error {
+    color: #ff9f9f;
 }
 
 table {
@@ -214,65 +300,22 @@ th {
         flex-direction: column;
     }
 
+    .section-heading {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
     .button-row {
         align-items: stretch;
         flex-direction: column;
     }
-}
 
-.section-heading {
-    display: flex;
-    justify-content: space-between;
-    gap: 16px;
-    align-items: center;
-}
+    .button-row form,
+    .button-row .button {
+        width: 100%;
+    }
 
-.run-identifier {
-    color: #64748b;
-    font-size: 0.85rem;
-}
-
-.run-identifier code {
-    overflow-wrap: anywhere;
-}
-
-.status-running {
-    color: #174b75;
-    background: #dcecf8;
-}
-
-.button-danger {
-    color: white;
-    background: #a32626;
-}
-
-.button:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-}
-
-.connection-state {
-    color: #64748b;
-    font-size: 0.9rem;
-    font-weight: 600;
-}
-
-.connection-state-live {
-    color: #14703b;
-}
-
-.console-output {
-    min-height: 260px;
-}
-
-.console-system {
-    color: #8dc8ff;
-}
-
-.console-warning {
-    color: #ffd479;
-}
-
-.console-error {
-    color: #ff9f9f;
+    .button-row .button {
+        text-align: center;
+    }
 }

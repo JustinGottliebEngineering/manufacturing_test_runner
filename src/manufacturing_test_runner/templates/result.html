@@ -20,6 +20,17 @@ Live Test | Manufacturing Test Runner
                 <strong>{{ live_run.serial_number }}</strong>
             </p>
 
+            <p>
+                Demonstration Scenario:
+                <strong>
+                    {{
+                        live_run.demo_mode
+                        | replace("_", " ")
+                        | upper
+                    }}
+                </strong>
+            </p>
+
             <p class="run-identifier">
                 Run ID:
                 <code>{{ live_run.run_id }}</code>
@@ -80,7 +91,11 @@ Live Test | Manufacturing Test Runner
     hidden
 >
     <h2>Errors</h2>
-    <ul id="error-list" class="error-list"></ul>
+
+    <ul
+        id="error-list"
+        class="error-list"
+    ></ul>
 </section>
 
 <section class="button-row">
@@ -138,34 +153,45 @@ Live Test | Manufacturing Test Runner
     const consoleOutput = document.getElementById(
         "console-output"
     );
+
     const statusElement = document.getElementById(
         "run-status"
     );
+
     const connectionState = document.getElementById(
         "connection-state"
     );
+
     const abortButton = document.getElementById(
         "abort-button"
     );
+
     const rerunButton = document.getElementById(
         "rerun-button"
     );
+
     const measurementsPanel = document.getElementById(
         "measurements-panel"
     );
+
     const measurementsBody = document.getElementById(
         "measurements-body"
     );
+
     const errorsPanel = document.getElementById(
         "errors-panel"
     );
+
     const errorList = document.getElementById(
         "error-list"
     );
 
     let runComplete = false;
 
-    function appendConsoleLine(text, className = "") {
+    function appendConsoleLine(
+        text,
+        className = ""
+    ) {
         const line = document.createElement("div");
 
         line.textContent = text;
@@ -175,13 +201,20 @@ Live Test | Manufacturing Test Runner
         }
 
         consoleOutput.appendChild(line);
-        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+        consoleOutput.scrollTop = (
+            consoleOutput.scrollHeight
+        );
     }
 
     function setStatus(status) {
-        const normalized = String(status).toLowerCase();
+        const normalized = String(
+            status
+        ).toLowerCase();
 
-        statusElement.textContent = normalized.toUpperCase();
+        statusElement.textContent = (
+            normalized.toUpperCase()
+        );
+
         statusElement.className = (
             `status status-${normalized}`
         );
@@ -194,7 +227,9 @@ Live Test | Manufacturing Test Runner
             measurements || {}
         );
 
-        measurementsPanel.hidden = entries.length === 0;
+        measurementsPanel.hidden = (
+            entries.length === 0
+        );
 
         for (const [name, value] of entries) {
             const row = document.createElement("tr");
@@ -204,7 +239,11 @@ Live Test | Manufacturing Test Runner
             nameCell.textContent = name;
             valueCell.textContent = String(value);
 
-            row.append(nameCell, valueCell);
+            row.append(
+                nameCell,
+                valueCell
+            );
+
             measurementsBody.appendChild(row);
         }
     }
@@ -214,10 +253,13 @@ Live Test | Manufacturing Test Runner
 
         const errorItems = errors || [];
 
-        errorsPanel.hidden = errorItems.length === 0;
+        errorsPanel.hidden = (
+            errorItems.length === 0
+        );
 
         for (const error of errorItems) {
             const item = document.createElement("li");
+
             item.textContent = error;
             errorList.appendChild(item);
         }
@@ -228,14 +270,21 @@ Live Test | Manufacturing Test Runner
         abortButton.disabled = true;
         rerunButton.disabled = false;
         connectionState.textContent = "Complete";
+
+        connectionState.classList.remove(
+            "connection-state-live"
+        );
     }
 
-    const eventSource = new EventSource(eventsUrl);
+    const eventSource = new EventSource(
+        eventsUrl
+    );
 
     eventSource.addEventListener(
         "open",
         () => {
             connectionState.textContent = "Live";
+
             connectionState.classList.add(
                 "connection-state-live"
             );
@@ -245,10 +294,17 @@ Live Test | Manufacturing Test Runner
     eventSource.addEventListener(
         "run_started",
         (event) => {
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(
+                event.data
+            );
 
             appendConsoleLine(
                 `Run started: ${data.procedure_name}`,
+                "console-system"
+            );
+
+            appendConsoleLine(
+                `Demonstration scenario: ${data.demo_mode}`,
                 "console-system"
             );
         }
@@ -257,7 +313,10 @@ Live Test | Manufacturing Test Runner
     eventSource.addEventListener(
         "procedure_message",
         (event) => {
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(
+                event.data
+            );
+
             const elapsed = Number(
                 data.elapsed_seconds
             ).toFixed(3);
@@ -271,7 +330,9 @@ Live Test | Manufacturing Test Runner
     eventSource.addEventListener(
         "abort_requested",
         (event) => {
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(
+                event.data
+            );
 
             appendConsoleLine(
                 data.message,
@@ -285,10 +346,14 @@ Live Test | Manufacturing Test Runner
     eventSource.addEventListener(
         "result",
         (event) => {
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(
+                event.data
+            );
 
             setStatus(data.status);
-            displayMeasurements(data.measurements);
+            displayMeasurements(
+                data.measurements
+            );
             displayErrors(data.errors);
         }
     );
@@ -296,21 +361,29 @@ Live Test | Manufacturing Test Runner
     eventSource.addEventListener(
         "execution_error",
         (event) => {
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(
+                event.data
+            );
 
             setStatus("error");
+
             appendConsoleLine(
                 data.message,
                 "console-error"
             );
-            displayErrors([data.message]);
+
+            displayErrors([
+                data.message
+            ]);
         }
     );
 
     eventSource.addEventListener(
         "complete",
         (event) => {
-            const data = JSON.parse(event.data);
+            const data = JSON.parse(
+                event.data
+            );
 
             setStatus(data.status);
             markComplete();
@@ -323,7 +396,10 @@ Live Test | Manufacturing Test Runner
             return;
         }
 
-        connectionState.textContent = "Reconnecting…";
+        connectionState.textContent = (
+            "Reconnecting…"
+        );
+
         connectionState.classList.remove(
             "connection-state-live"
         );
@@ -355,7 +431,9 @@ Live Test | Manufacturing Test Runner
                 );
 
                 if (!response.ok) {
-                    abortButton.disabled = runComplete;
+                    abortButton.disabled = (
+                        runComplete
+                    );
                 }
             } catch (error) {
                 appendConsoleLine(
@@ -363,7 +441,9 @@ Live Test | Manufacturing Test Runner
                     "console-error"
                 );
 
-                abortButton.disabled = runComplete;
+                abortButton.disabled = (
+                    runComplete
+                );
             }
         }
     );

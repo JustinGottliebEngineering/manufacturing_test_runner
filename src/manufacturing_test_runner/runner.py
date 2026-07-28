@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import Lock
-from typing import Callable
+from typing import Any, Callable
 
 from manufacturing_test_runner.procedures.base import (
     BaseProcedure,
@@ -47,17 +47,7 @@ DEFAULT_PROCEDURES: dict[str, ProcedureDefinition] = {
 
 
 class ProcedureRunner:
-    """
-    Coordinates manufacturing procedure execution.
-
-    Responsibilities:
-    - Look up procedures by ID
-    - Prevent concurrent execution
-    - Track the active procedure
-    - Forward live procedure messages
-    - Store the most recent result
-    - Support abort and rerun operations
-    """
+    """Coordinates manufacturing procedure execution."""
 
     def __init__(
         self,
@@ -73,6 +63,7 @@ class ProcedureRunner:
         self._active_procedure: BaseProcedure | None = None
         self._active_procedure_id: str | None = None
         self._last_procedure_id: str | None = None
+        self._last_procedure_options: dict[str, Any] = {}
         self._last_result: ProcedureResult | None = None
 
     @property
@@ -124,17 +115,13 @@ class ProcedureRunner:
         procedure_id: str,
         *,
         message_callback: MessageCallback | None = None,
+        procedure_options: dict[str, Any] | None = None,
     ) -> ProcedureResult:
-        """
-        Execute one procedure synchronously.
-
-        A nonblocking lock prevents two callers from using the same
-        simulated station at the same time.
-        """
-
         definition = self.get_procedure_definition(
             procedure_id
         )
+
+        options = dict(procedure_options or {})
 
         if not self._execution_lock.acquire(blocking=False):
             raise ProcedureRunnerError(
@@ -146,7 +133,8 @@ class ProcedureRunner:
 
         try:
             procedure = definition.factory(
-                message_callback=message_callback
+                message_callback=message_callback,
+                **options,
             )
 
             with self._state_lock:
@@ -161,6 +149,7 @@ class ProcedureRunner:
                 self._last_procedure_id = (
                     definition.procedure_id
                 )
+                self._last_procedure_options = dict(options)
                 self._last_result = result
 
             return result
@@ -173,13 +162,6 @@ class ProcedureRunner:
             self._execution_lock.release()
 
     def request_abort(self) -> bool:
-        """
-        Request that the active procedure abort.
-
-        Returns True when an active procedure received the request.
-        Returns False when the station is idle.
-        """
-
         with self._state_lock:
             procedure = self._active_procedure
 
@@ -196,6 +178,9 @@ class ProcedureRunner:
     ) -> ProcedureResult:
         with self._state_lock:
             procedure_id = self._last_procedure_id
+            procedure_options = dict(
+                self._last_procedure_options
+            )
 
         if procedure_id is None:
             raise ProcedureRunnerError(
@@ -205,4 +190,5 @@ class ProcedureRunner:
         return self.execute(
             procedure_id,
             message_callback=message_callback,
+            procedure_options=procedure_options,
         )

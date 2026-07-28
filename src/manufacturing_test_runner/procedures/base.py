@@ -3,7 +3,7 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from enum import Enum
-from time import monotonic
+from time import monotonic, sleep
 from typing import Callable
 
 
@@ -49,8 +49,15 @@ class BaseProcedure(ABC):
         self,
         *,
         message_callback: MessageCallback | None = None,
+        step_delay_seconds: float = 0.0,
     ) -> None:
+        if step_delay_seconds < 0:
+            raise ValueError(
+                "step_delay_seconds cannot be negative."
+            )
+
         self._message_callback = message_callback
+        self._step_delay_seconds = step_delay_seconds
         self._messages: list[ProcedureMessage] = []
         self._start_time: float | None = None
         self._abort_requested = False
@@ -83,6 +90,39 @@ class BaseProcedure(ABC):
             raise ProcedureAbortedError(
                 "Procedure abort was requested."
             )
+
+    def pause(
+        self,
+        seconds: float | None = None,
+    ) -> None:
+        """
+        Pause while continuing to check for abort requests.
+
+        Small sleep intervals make the abort button responsive during
+        simulated long-running procedure steps.
+        """
+
+        duration = (
+            self._step_delay_seconds
+            if seconds is None
+            else seconds
+        )
+
+        if duration <= 0:
+            self.check_abort()
+            return
+
+        deadline = monotonic() + duration
+
+        while True:
+            self.check_abort()
+
+            remaining = deadline - monotonic()
+
+            if remaining <= 0:
+                return
+
+            sleep(min(0.05, remaining))
 
     def execute(self) -> ProcedureResult:
         self._start_time = monotonic()
