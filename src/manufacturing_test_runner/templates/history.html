@@ -1,72 +1,224 @@
 {% extends "base.html" %}
 
 {% block title %}
-Recent Result | Manufacturing Test Runner
+Test History | Manufacturing Test Runner
 {% endblock %}
 
 {% block content %}
 <section class="panel">
-    <h2>Most Recent Procedure Result</h2>
+    <div class="section-heading">
+        <div>
+            <h2>Persistent Test History</h2>
 
-    {% if latest_run and latest_run.result %}
-        <p>
-            Procedure:
-            <strong>
-                {{ latest_run.result.procedure_name }}
-            </strong>
-        </p>
+            <p class="intro">
+                Search completed test records by production identifier,
+                procedure, or outcome.
+            </p>
+        </div>
 
-        <p>
-            Work Order:
-            <strong>{{ latest_run.work_order }}</strong>
-        </p>
+        <div class="history-count">
+            {{ result_count }} shown / {{ total_count }} total
+        </div>
+    </div>
 
-        <p>
-            Serial Number:
-            <strong>{{ latest_run.serial_number }}</strong>
-        </p>
+    <form
+        method="get"
+        action="{{ url_for('main.history') }}"
+    >
+        <div class="history-filter-grid">
+            <div class="form-field">
+                <label for="work_order_filter">
+                    Work Order
+                </label>
 
-        <p>
-            Status:
-            <strong>
-                {{ latest_run.result.status.value | upper }}
-            </strong>
-        </p>
+                <input
+                    id="work_order_filter"
+                    name="work_order"
+                    type="text"
+                    value="{{ filters.work_order }}"
+                    placeholder="Search work orders"
+                >
+            </div>
 
-        <p>
-            Recorded Messages:
-            <strong>
-                {{ latest_run.result.messages | length }}
-            </strong>
-        </p>
+            <div class="form-field">
+                <label for="serial_number_filter">
+                    Serial Number
+                </label>
 
-        <p>
-            Measurements:
-            <strong>
-                {{ latest_run.result.measurements | length }}
-            </strong>
-        </p>
+                <input
+                    id="serial_number_filter"
+                    name="serial_number"
+                    type="text"
+                    value="{{ filters.serial_number }}"
+                    placeholder="Search serial numbers"
+                >
+            </div>
 
-        <p>
-            Errors:
-            <strong>
-                {{ latest_run.result.errors | length }}
-            </strong>
-        </p>
+            <div class="form-field">
+                <label for="procedure_filter">
+                    Procedure
+                </label>
 
-        <a
-            class="button button-primary"
-            href="{{
-                url_for(
-                    'main.live_result',
-                    run_id=latest_run.run_id
-                )
-            }}"
-        >
-            View Complete Result
-        </a>
+                <select
+                    id="procedure_filter"
+                    name="procedure_id"
+                >
+                    <option value="">
+                        All procedures
+                    </option>
+
+                    {% for procedure in procedures %}
+                        <option
+                            value="{{ procedure.procedure_id }}"
+                            {% if
+                                filters.procedure_id
+                                == procedure.procedure_id
+                            %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ procedure.display_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-field">
+                <label for="status_filter">
+                    Status
+                </label>
+
+                <select
+                    id="status_filter"
+                    name="status"
+                >
+                    <option value="">
+                        All statuses
+                    </option>
+
+                    {% for status_value in [
+                        "passed",
+                        "failed",
+                        "error",
+                        "aborted"
+                    ] %}
+                        <option
+                            value="{{ status_value }}"
+                            {% if
+                                filters.status == status_value
+                            %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ status_value | upper }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <div class="button-row">
+            <button
+                type="submit"
+                class="button button-primary"
+            >
+                Search History
+            </button>
+
+            <a
+                class="button button-secondary"
+                href="{{ url_for('main.history') }}"
+            >
+                Clear Filters
+            </a>
+        </div>
+    </form>
+</section>
+
+<section class="panel">
+    <h2>Completed Test Records</h2>
+
+    {% if results %}
+        <div class="table-scroll">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Recorded</th>
+                        <th>Work Order</th>
+                        <th>Serial Number</th>
+                        <th>Procedure</th>
+                        <th>Scenario</th>
+                        <th>Status</th>
+                        <th></th>
+                    </tr>
+                </thead>
+
+                <tbody>
+                    {% for result in results %}
+                        <tr>
+                            <td>{{ result.result_id }}</td>
+
+                            <td>
+                                <time datetime="{{ result.created_at }}">
+                                    {{
+                                        result.created_at
+                                        | replace("T", " ")
+                                        | truncate(19, true, "")
+                                    }}
+                                </time>
+                            </td>
+
+                            <td>{{ result.work_order }}</td>
+                            <td>{{ result.serial_number }}</td>
+                            <td>{{ result.procedure_name }}</td>
+
+                            <td>
+                                {{
+                                    result.demo_mode
+                                    | replace("_", " ")
+                                    | upper
+                                }}
+                            </td>
+
+                            <td>
+                                <span
+                                    class="
+                                        history-status
+                                        history-status-{{ result.status }}
+                                    "
+                                >
+                                    {{ result.status | upper }}
+                                </span>
+                            </td>
+
+                            <td>
+                                <a
+                                    class="table-link"
+                                    href="{{
+                                        url_for(
+                                            'main.history_detail',
+                                            result_id=result.result_id
+                                        )
+                                    }}"
+                                >
+                                    View
+                                </a>
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     {% else %}
-        <p>No procedure has been executed during this session.</p>
+        <div class="empty-state">
+            <h3>No matching records</h3>
+
+            <p>
+                Complete a procedure or adjust the current search
+                filters.
+            </p>
+        </div>
     {% endif %}
 </section>
 {% endblock %}

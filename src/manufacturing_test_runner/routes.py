@@ -15,6 +15,9 @@ from flask import (
     url_for,
 )
 
+from manufacturing_test_runner.history_store import (
+    TestHistoryStore,
+)
 from manufacturing_test_runner.live_runs import (
     LiveRun,
     LiveRunError,
@@ -57,6 +60,24 @@ def get_live_run_manager() -> LiveRunManager:
         )
 
     return manager
+
+
+def get_history_store() -> TestHistoryStore:
+    """Return the application-level history store."""
+
+    history_store = current_app.extensions.get(
+        "history_store"
+    )
+
+    if not isinstance(
+        history_store,
+        TestHistoryStore,
+    ):
+        raise RuntimeError(
+            "Test history store is not configured."
+        )
+
+    return history_store
 
 
 def find_live_run(run_id: str) -> LiveRun:
@@ -295,14 +316,66 @@ def rerun_live_run(run_id: str):
 
 @bp.get("/history")
 def history() -> str:
-    latest_run = (
-        get_live_run_manager()
-        .get_latest_completed_run()
+    history_store = get_history_store()
+    runner = get_runner()
+
+    work_order = request.args.get(
+        "work_order",
+        "",
+    ).strip()
+
+    serial_number = request.args.get(
+        "serial_number",
+        "",
+    ).strip()
+
+    procedure_id = request.args.get(
+        "procedure_id",
+        "",
+    ).strip()
+
+    status = request.args.get(
+        "status",
+        "",
+    ).strip()
+
+    results = history_store.list_results(
+        work_order=work_order,
+        serial_number=serial_number,
+        procedure_id=procedure_id,
+        status=status,
+        limit=100,
     )
 
     return render_template(
         "history.html",
-        latest_run=latest_run,
+        results=results,
+        procedures=runner.list_procedures(),
+        filters={
+            "work_order": work_order,
+            "serial_number": serial_number,
+            "procedure_id": procedure_id,
+            "status": status,
+        },
+        result_count=len(results),
+        total_count=history_store.count_results(),
+    )
+
+
+@bp.get("/history/<int:result_id>")
+def history_detail(
+    result_id: int,
+) -> str:
+    stored_result = get_history_store().get_result(
+        result_id
+    )
+
+    if stored_result is None:
+        abort(404)
+
+    return render_template(
+        "history_detail.html",
+        stored_result=stored_result,
     )
 
 

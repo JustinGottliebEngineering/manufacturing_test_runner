@@ -349,10 +349,11 @@ def test_history_page_reports_empty_state(
     response = client.get("/history")
 
     assert response.status_code == 200
-    assert b"No procedure has been executed" in response.data
+    assert b"Persistent Test History" in response.data
+    assert b"No matching records" in response.data
 
 
-def test_history_page_reports_latest_result(
+def test_history_page_lists_saved_result(
     tmp_path: Path,
 ) -> None:
     app = create_test_app(tmp_path)
@@ -368,7 +369,100 @@ def test_history_page_reports_latest_result(
     assert b"DEMO-WO-001" in response.data
     assert b"DEMO-SN-001" in response.data
     assert b"PASSED" in response.data
+    assert b"View" in response.data
 
+
+def test_history_page_filters_results(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
+    client = app.test_client()
+
+    passing_run_id = start_test_run(
+        app,
+        procedure_id="sensor_calibration",
+        demo_mode="pass",
+    )
+
+    wait_for_run_completion(
+        app,
+        passing_run_id,
+    )
+
+    failing_run_id = start_test_run(
+        app,
+        procedure_id="controller_functional_test",
+        demo_mode="fail",
+    )
+
+    wait_for_run_completion(
+        app,
+        failing_run_id,
+    )
+
+    response = client.get(
+        "/history",
+        query_string={
+            "procedure_id": (
+                "controller_functional_test"
+            ),
+            "status": "failed",
+        },
+    )
+
+    assert response.status_code == 200
+
+    page = response.get_data(as_text=True)
+
+    assert "1 shown / 2 total" in page
+    assert "Controller Functional Test" in page
+    assert "FAILED" in page
+
+    table_start = page.index("<tbody")
+    table_end = page.index("</tbody>", table_start)
+    results_table = page[table_start:table_end]
+
+    assert "Controller Functional Test" in results_table
+    assert "FAILED" in results_table
+    assert "Sensor Module Calibration" not in results_table
+
+def test_history_detail_page_loads(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
+    client = app.test_client()
+    run_id = start_test_run(app)
+
+    wait_for_run_completion(app, run_id)
+
+    history_store = app.extensions["history_store"]
+    stored_result = (
+        history_store.get_result_by_run_id(
+            run_id
+        )
+    )
+
+    assert stored_result is not None
+
+    response = client.get(
+        f"/history/{stored_result.result_id}"
+    )
+
+    assert response.status_code == 200
+    assert b"Sensor Module Calibration" in response.data
+    assert b"DEMO-WO-001" in response.data
+    assert b"supply_voltage_v" in response.data
+
+
+def test_unknown_history_result_returns_not_found(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
+    client = app.test_client()
+
+    response = client.get("/history/999999")
+
+    assert response.status_code == 404
 
 def test_unknown_live_run_returns_not_found(
     tmp_path: Path,

@@ -31,6 +31,8 @@ class StoredTestResult:
 class TestHistoryStore:
     """SQLite-backed storage for completed manufacturing test runs."""
 
+    __test__ = False
+
     def __init__(
         self,
         database_path: str | Path,

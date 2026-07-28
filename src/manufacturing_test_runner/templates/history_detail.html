@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}
+Test Record {{ stored_result.result_id }}
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="result-heading">
+        <div>
+            <h2>{{ stored_result.procedure_name }}</h2>
+
+            <p>
+                Record ID:
+                <strong>{{ stored_result.result_id }}</strong>
+            </p>
+
+            <p>
+                Work Order:
+                <strong>{{ stored_result.work_order }}</strong>
+            </p>
+
+            <p>
+                Serial Number:
+                <strong>{{ stored_result.serial_number }}</strong>
+            </p>
+
+            <p>
+                Demonstration Scenario:
+                <strong>
+                    {{
+                        stored_result.demo_mode
+                        | replace("_", " ")
+                        | upper
+                    }}
+                </strong>
+            </p>
+
+            <p>
+                Recorded:
+                <strong>
+                    {{ stored_result.created_at }}
+                </strong>
+            </p>
+
+            <p class="run-identifier">
+                Run ID:
+                <code>{{ stored_result.run_id }}</code>
+            </p>
+        </div>
+
+        <div
+            class="
+                status
+                status-{{ stored_result.status }}
+            "
+        >
+            {{ stored_result.status | upper }}
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Measurements</h2>
+
+    {% if stored_result.measurements %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Measurement</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+
+            <tbody>
+                {% for name, value in stored_result.measurements.items() %}
+                    <tr>
+                        <td>{{ name }}</td>
+                        <td>{{ value }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No measurements were recorded.</p>
+    {% endif %}
+</section>
+
+{% if stored_result.errors %}
+<section class="panel">
+    <h2>Errors</h2>
+
+    <ul class="error-list">
+        {% for error in stored_result.errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section class="button-row">
+    <a
+        class="button button-secondary"
+        href="{{ url_for('main.history') }}"
+    >
+        Back to History
+    </a>
+
+    <a
+        class="button button-primary"
+        href="{{ url_for('main.setup') }}"
+    >
+        Run New Test
+    </a>
+</section>
+{% endblock %}
