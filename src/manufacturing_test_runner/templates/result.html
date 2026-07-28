@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}
+Test Result | Manufacturing Test Runner
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <div class="result-heading">
+        <div>
+            <h2>{{ result.procedure_name }}</h2>
+
+            <p>
+                Work Order:
+                <strong>{{ work_order }}</strong>
+            </p>
+
+            <p>
+                Serial Number:
+                <strong>{{ serial_number }}</strong>
+            </p>
+        </div>
+
+        <div class="status status-{{ result.status.value }}">
+            {{ result.status.value | upper }}
+        </div>
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Procedure Output</h2>
+
+    <div class="console-output">
+        {% for message in result.messages %}
+            <div>
+                [{{ "%.3f" | format(message.elapsed_seconds) }}]
+                {{ message.message }}
+            </div>
+        {% endfor %}
+    </div>
+</section>
+
+<section class="panel">
+    <h2>Measurements</h2>
+
+    {% if result.measurements %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Measurement</th>
+                    <th>Value</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for name, value in result.measurements.items() %}
+                    <tr>
+                        <td>{{ name }}</td>
+                        <td>{{ value }}</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% else %}
+        <p>No measurements were recorded.</p>
+    {% endif %}
+</section>
+
+{% if result.errors %}
+<section class="panel">
+    <h2>Errors</h2>
+
+    <ul class="error-list">
+        {% for error in result.errors %}
+            <li>{{ error }}</li>
+        {% endfor %}
+    </ul>
+</section>
+{% endif %}
+
+<section class="button-row">
+    <form method="post" action="{{ url_for('main.rerun_procedure') }}">
+        <input
+            type="hidden"
+            name="work_order"
+            value="{{ work_order }}"
+        >
+        <input
+            type="hidden"
+            name="serial_number"
+            value="{{ serial_number }}"
+        >
+
+        <button type="submit" class="button button-primary">
+            Rerun Procedure
+        </button>
+    </form>
+
+    <a
+        class="button button-secondary"
+        href="{{ url_for('main.setup') }}"
+    >
+        New Test Setup
+    </a>
+</section>
+{% endblock %}

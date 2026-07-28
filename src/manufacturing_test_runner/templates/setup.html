@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+
+{% block title %}
+Test Setup | Manufacturing Test Runner
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <h2>Test Setup</h2>
+
+    <p class="intro">
+        Enter fictional production information and select a simulated
+        manufacturing test procedure.
+    </p>
+
+    {% if error %}
+        <div class="alert alert-error">
+            {{ error }}
+        </div>
+    {% endif %}
+
+    <form method="post" action="{{ url_for('main.run_procedure') }}">
+        <div class="form-grid">
+            <div class="form-field">
+                <label for="work_order">Work Order</label>
+                <input
+                    id="work_order"
+                    name="work_order"
+                    type="text"
+                    value="{{ form_data.work_order }}"
+                    placeholder="DEMO-WO-1001"
+                    required
+                >
+            </div>
+
+            <div class="form-field">
+                <label for="serial_number">Serial Number</label>
+                <input
+                    id="serial_number"
+                    name="serial_number"
+                    type="text"
+                    value="{{ form_data.serial_number }}"
+                    placeholder="DEMO-SN-0001"
+                    required
+                >
+            </div>
+
+            <div class="form-field form-field-wide">
+                <label for="procedure_id">Test Procedure</label>
+                <select
+                    id="procedure_id"
+                    name="procedure_id"
+                    required
+                >
+                    <option value="">Select a procedure</option>
+
+                    {% for procedure in procedures %}
+                        <option
+                            value="{{ procedure.procedure_id }}"
+                            {% if
+                                form_data.procedure_id
+                                == procedure.procedure_id
+                            %}
+                                selected
+                            {% endif %}
+                        >
+                            {{ procedure.display_name }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+        </div>
+
+        <button type="submit" class="button button-primary">
+            Run Test Procedure
+        </button>
+    </form>
+</section>
+
+<section class="panel">
+    <h2>Available Demonstrations</h2>
+
+    <ul>
+        <li>
+            Sensor calibration using a simulated programmable power
+            supply and frequency counter
+        </li>
+        <li>
+            Controller functional testing using simulated serial
+            commands, retries, timeouts, and self-test responses
+        </li>
+    </ul>
+</section>
+{% endblock %}

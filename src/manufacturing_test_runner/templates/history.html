@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block title %}
+Recent Result | Manufacturing Test Runner
+{% endblock %}
+
+{% block content %}
+<section class="panel">
+    <h2>Most Recent Procedure Result</h2>
+
+    {% if last_result %}
+        <p>
+            Procedure:
+            <strong>{{ last_result.procedure_name }}</strong>
+        </p>
+
+        <p>
+            Procedure ID:
+            <strong>{{ last_procedure_id }}</strong>
+        </p>
+
+        <p>
+            Status:
+            <strong>{{ last_result.status.value | upper }}</strong>
+        </p>
+
+        <p>
+            Recorded Messages:
+            <strong>{{ last_result.messages | length }}</strong>
+        </p>
+
+        <p>
+            Measurements:
+            <strong>{{ last_result.measurements | length }}</strong>
+        </p>
+
+        <p>
+            Errors:
+            <strong>{{ last_result.errors | length }}</strong>
+        </p>
+    {% else %}
+        <p>No procedure has been executed during this session.</p>
+    {% endif %}
+</section>
+{% endblock %}

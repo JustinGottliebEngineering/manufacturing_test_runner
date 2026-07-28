@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1"
+    >
+    <title>{% block title %}Manufacturing Test Runner{% endblock %}</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/app.css') }}"
+    >
+</head>
+<body>
+    <header class="site-header">
+        <div class="page-shell">
+            <h1>Manufacturing Test Runner</h1>
+            <p>Simulated production test-station demonstration</p>
+        </div>
+    </header>
+
+    <nav class="site-nav">
+        <div class="page-shell">
+            <a href="{{ url_for('main.setup') }}">Test Setup</a>
+            <a href="{{ url_for('main.history') }}">Recent Result</a>
+        </div>
+    </nav>
+
+    <main class="page-shell">
+        {% block content %}{% endblock %}
+    </main>
+</body>
+</html>
