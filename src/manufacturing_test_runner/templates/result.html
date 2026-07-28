@@ -1,96 +1,112 @@
 {% extends "base.html" %}
 
 {% block title %}
-Test Result | Manufacturing Test Runner
+Live Test | Manufacturing Test Runner
 {% endblock %}
 
 {% block content %}
 <section class="panel">
     <div class="result-heading">
         <div>
-            <h2>{{ result.procedure_name }}</h2>
+            <h2>{{ live_run.procedure_name }}</h2>
 
             <p>
                 Work Order:
-                <strong>{{ work_order }}</strong>
+                <strong>{{ live_run.work_order }}</strong>
             </p>
 
             <p>
                 Serial Number:
-                <strong>{{ serial_number }}</strong>
+                <strong>{{ live_run.serial_number }}</strong>
+            </p>
+
+            <p class="run-identifier">
+                Run ID:
+                <code>{{ live_run.run_id }}</code>
             </p>
         </div>
 
-        <div class="status status-{{ result.status.value }}">
-            {{ result.status.value | upper }}
+        <div
+            id="run-status"
+            class="status status-running"
+        >
+            RUNNING
         </div>
     </div>
 </section>
 
 <section class="panel">
-    <h2>Procedure Output</h2>
+    <div class="section-heading">
+        <h2>Live Procedure Output</h2>
 
-    <div class="console-output">
-        {% for message in result.messages %}
-            <div>
-                [{{ "%.3f" | format(message.elapsed_seconds) }}]
-                {{ message.message }}
-            </div>
-        {% endfor %}
+        <span
+            id="connection-state"
+            class="connection-state"
+        >
+            Connecting…
+        </span>
     </div>
+
+    <div
+        id="console-output"
+        class="console-output"
+        role="log"
+        aria-live="polite"
+    ></div>
 </section>
 
-<section class="panel">
+<section
+    id="measurements-panel"
+    class="panel"
+    hidden
+>
     <h2>Measurements</h2>
 
-    {% if result.measurements %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Measurement</th>
-                    <th>Value</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for name, value in result.measurements.items() %}
-                    <tr>
-                        <td>{{ name }}</td>
-                        <td>{{ value }}</td>
-                    </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    {% else %}
-        <p>No measurements were recorded.</p>
-    {% endif %}
+    <table>
+        <thead>
+            <tr>
+                <th>Measurement</th>
+                <th>Value</th>
+            </tr>
+        </thead>
+
+        <tbody id="measurements-body"></tbody>
+    </table>
 </section>
 
-{% if result.errors %}
-<section class="panel">
+<section
+    id="errors-panel"
+    class="panel"
+    hidden
+>
     <h2>Errors</h2>
-
-    <ul class="error-list">
-        {% for error in result.errors %}
-            <li>{{ error }}</li>
-        {% endfor %}
-    </ul>
+    <ul id="error-list" class="error-list"></ul>
 </section>
-{% endif %}
 
 <section class="button-row">
-    <form method="post" action="{{ url_for('main.rerun_procedure') }}">
-        <input
-            type="hidden"
-            name="work_order"
-            value="{{ work_order }}"
-        >
-        <input
-            type="hidden"
-            name="serial_number"
-            value="{{ serial_number }}"
-        >
+    <button
+        id="abort-button"
+        type="button"
+        class="button button-danger"
+    >
+        Abort Procedure
+    </button>
 
-        <button type="submit" class="button button-primary">
+    <form
+        method="post"
+        action="{{
+            url_for(
+                'main.rerun_live_run',
+                run_id=live_run.run_id
+            )
+        }}"
+    >
+        <button
+            id="rerun-button"
+            type="submit"
+            class="button button-primary"
+            disabled
+        >
             Rerun Procedure
         </button>
     </form>
@@ -102,4 +118,255 @@ Test Result | Manufacturing Test Runner
         New Test Setup
     </a>
 </section>
+
+<script>
+(() => {
+    const eventsUrl = {{
+        url_for(
+            "main.live_events",
+            run_id=live_run.run_id
+        ) | tojson
+    }};
+
+    const abortUrl = {{
+        url_for(
+            "main.abort_live_run",
+            run_id=live_run.run_id
+        ) | tojson
+    }};
+
+    const consoleOutput = document.getElementById(
+        "console-output"
+    );
+    const statusElement = document.getElementById(
+        "run-status"
+    );
+    const connectionState = document.getElementById(
+        "connection-state"
+    );
+    const abortButton = document.getElementById(
+        "abort-button"
+    );
+    const rerunButton = document.getElementById(
+        "rerun-button"
+    );
+    const measurementsPanel = document.getElementById(
+        "measurements-panel"
+    );
+    const measurementsBody = document.getElementById(
+        "measurements-body"
+    );
+    const errorsPanel = document.getElementById(
+        "errors-panel"
+    );
+    const errorList = document.getElementById(
+        "error-list"
+    );
+
+    let runComplete = false;
+
+    function appendConsoleLine(text, className = "") {
+        const line = document.createElement("div");
+
+        line.textContent = text;
+
+        if (className) {
+            line.classList.add(className);
+        }
+
+        consoleOutput.appendChild(line);
+        consoleOutput.scrollTop = consoleOutput.scrollHeight;
+    }
+
+    function setStatus(status) {
+        const normalized = String(status).toLowerCase();
+
+        statusElement.textContent = normalized.toUpperCase();
+        statusElement.className = (
+            `status status-${normalized}`
+        );
+    }
+
+    function displayMeasurements(measurements) {
+        measurementsBody.replaceChildren();
+
+        const entries = Object.entries(
+            measurements || {}
+        );
+
+        measurementsPanel.hidden = entries.length === 0;
+
+        for (const [name, value] of entries) {
+            const row = document.createElement("tr");
+            const nameCell = document.createElement("td");
+            const valueCell = document.createElement("td");
+
+            nameCell.textContent = name;
+            valueCell.textContent = String(value);
+
+            row.append(nameCell, valueCell);
+            measurementsBody.appendChild(row);
+        }
+    }
+
+    function displayErrors(errors) {
+        errorList.replaceChildren();
+
+        const errorItems = errors || [];
+
+        errorsPanel.hidden = errorItems.length === 0;
+
+        for (const error of errorItems) {
+            const item = document.createElement("li");
+            item.textContent = error;
+            errorList.appendChild(item);
+        }
+    }
+
+    function markComplete() {
+        runComplete = true;
+        abortButton.disabled = true;
+        rerunButton.disabled = false;
+        connectionState.textContent = "Complete";
+    }
+
+    const eventSource = new EventSource(eventsUrl);
+
+    eventSource.addEventListener(
+        "open",
+        () => {
+            connectionState.textContent = "Live";
+            connectionState.classList.add(
+                "connection-state-live"
+            );
+        }
+    );
+
+    eventSource.addEventListener(
+        "run_started",
+        (event) => {
+            const data = JSON.parse(event.data);
+
+            appendConsoleLine(
+                `Run started: ${data.procedure_name}`,
+                "console-system"
+            );
+        }
+    );
+
+    eventSource.addEventListener(
+        "procedure_message",
+        (event) => {
+            const data = JSON.parse(event.data);
+            const elapsed = Number(
+                data.elapsed_seconds
+            ).toFixed(3);
+
+            appendConsoleLine(
+                `[${elapsed}] ${data.message}`
+            );
+        }
+    );
+
+    eventSource.addEventListener(
+        "abort_requested",
+        (event) => {
+            const data = JSON.parse(event.data);
+
+            appendConsoleLine(
+                data.message,
+                "console-warning"
+            );
+
+            abortButton.disabled = true;
+        }
+    );
+
+    eventSource.addEventListener(
+        "result",
+        (event) => {
+            const data = JSON.parse(event.data);
+
+            setStatus(data.status);
+            displayMeasurements(data.measurements);
+            displayErrors(data.errors);
+        }
+    );
+
+    eventSource.addEventListener(
+        "execution_error",
+        (event) => {
+            const data = JSON.parse(event.data);
+
+            setStatus("error");
+            appendConsoleLine(
+                data.message,
+                "console-error"
+            );
+            displayErrors([data.message]);
+        }
+    );
+
+    eventSource.addEventListener(
+        "complete",
+        (event) => {
+            const data = JSON.parse(event.data);
+
+            setStatus(data.status);
+            markComplete();
+            eventSource.close();
+        }
+    );
+
+    eventSource.onerror = () => {
+        if (runComplete) {
+            return;
+        }
+
+        connectionState.textContent = "Reconnecting…";
+        connectionState.classList.remove(
+            "connection-state-live"
+        );
+    };
+
+    abortButton.addEventListener(
+        "click",
+        async () => {
+            abortButton.disabled = true;
+
+            try {
+                const response = await fetch(
+                    abortUrl,
+                    {
+                        method: "POST",
+                        headers: {
+                            "Accept": "application/json"
+                        }
+                    }
+                );
+
+                const data = await response.json();
+
+                appendConsoleLine(
+                    data.message,
+                    response.ok
+                        ? "console-warning"
+                        : "console-error"
+                );
+
+                if (!response.ok) {
+                    abortButton.disabled = runComplete;
+                }
+            } catch (error) {
+                appendConsoleLine(
+                    `Abort request failed: ${error}`,
+                    "console-error"
+                );
+
+                abortButton.disabled = runComplete;
+            }
+        }
+    );
+})();
+</script>
 {% endblock %}

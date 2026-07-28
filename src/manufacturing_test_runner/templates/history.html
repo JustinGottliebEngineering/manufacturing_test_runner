@@ -8,36 +8,63 @@ Recent Result | Manufacturing Test Runner
 <section class="panel">
     <h2>Most Recent Procedure Result</h2>
 
-    {% if last_result %}
+    {% if latest_run and latest_run.result %}
         <p>
             Procedure:
-            <strong>{{ last_result.procedure_name }}</strong>
+            <strong>
+                {{ latest_run.result.procedure_name }}
+            </strong>
         </p>
 
         <p>
-            Procedure ID:
-            <strong>{{ last_procedure_id }}</strong>
+            Work Order:
+            <strong>{{ latest_run.work_order }}</strong>
+        </p>
+
+        <p>
+            Serial Number:
+            <strong>{{ latest_run.serial_number }}</strong>
         </p>
 
         <p>
             Status:
-            <strong>{{ last_result.status.value | upper }}</strong>
+            <strong>
+                {{ latest_run.result.status.value | upper }}
+            </strong>
         </p>
 
         <p>
             Recorded Messages:
-            <strong>{{ last_result.messages | length }}</strong>
+            <strong>
+                {{ latest_run.result.messages | length }}
+            </strong>
         </p>
 
         <p>
             Measurements:
-            <strong>{{ last_result.measurements | length }}</strong>
+            <strong>
+                {{ latest_run.result.measurements | length }}
+            </strong>
         </p>
 
         <p>
             Errors:
-            <strong>{{ last_result.errors | length }}</strong>
+            <strong>
+                {{ latest_run.result.errors | length }}
+            </strong>
         </p>
+
+        <a
+            class="button button-primary"
+            href="{{
+                url_for(
+                    'main.live_result',
+                    run_id=latest_run.run_id
+                )
+            }}"
+        >
+            View Complete Result
+        </a>
     {% else %}
         <p>No procedure has been executed during this session.</p>
     {% endif %}
