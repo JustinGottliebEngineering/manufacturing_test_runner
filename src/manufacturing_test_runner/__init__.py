@@ -1,7 +1,12 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from flask import Flask
 
+from manufacturing_test_runner.history_store import (
+    TestHistoryStore,
+)
 from manufacturing_test_runner.live_runs import (
     LiveRunManager,
 )
@@ -23,6 +28,10 @@ def create_app(
         SECRET_KEY="development-only-secret",
         TESTING=False,
         LIVE_STEP_DELAY_SECONDS=0.65,
+        HISTORY_DATABASE_PATH=(
+            Path(app.instance_path)
+            / "manufacturing_test_history.sqlite3"
+        ),
     )
 
     if test_config is not None:
@@ -37,10 +46,16 @@ def create_app(
     ):
         app.config["LIVE_STEP_DELAY_SECONDS"] = 0.0
 
+    history_store = TestHistoryStore(
+        app.config["HISTORY_DATABASE_PATH"]
+    )
+    history_store.initialize()
+
     procedure_runner = ProcedureRunner()
 
     live_run_manager = LiveRunManager(
         procedure_runner,
+        history_store=history_store,
         step_delay_seconds=float(
             app.config["LIVE_STEP_DELAY_SECONDS"]
         ),
@@ -48,6 +63,7 @@ def create_app(
 
     app.extensions["procedure_runner"] = procedure_runner
     app.extensions["live_run_manager"] = live_run_manager
+    app.extensions["history_store"] = history_store
 
     app.register_blueprint(bp)
 

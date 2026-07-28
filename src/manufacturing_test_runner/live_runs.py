@@ -7,6 +7,9 @@ from time import time
 from typing import Any
 from uuid import uuid4
 
+from manufacturing_test_runner.history_store import (
+    TestHistoryStore,
+)
 from manufacturing_test_runner.procedures.base import (
     ProcedureMessage,
     ProcedureResult,
@@ -53,6 +56,7 @@ class LiveRun:
     completed: bool = False
     abort_requested: bool = False
     execution_error: str | None = None
+    stored_result_id: int | None = None
 
     _events: list[LiveEvent] = field(
         default_factory=list,
@@ -86,10 +90,12 @@ class LiveRun:
         *,
         result: ProcedureResult | None = None,
         execution_error: str | None = None,
+        stored_result_id: int | None = None,
     ) -> None:
         with self._condition:
             self.result = result
             self.execution_error = execution_error
+            self.stored_result_id = stored_result_id
             self.completed = True
             self._condition.notify_all()
 
@@ -124,6 +130,7 @@ class LiveRunManager:
         self,
         procedure_runner: ProcedureRunner,
         *,
+        history_store: TestHistoryStore,
         step_delay_seconds: float = 0.65,
     ) -> None:
         if step_delay_seconds < 0:
@@ -132,6 +139,7 @@ class LiveRunManager:
             )
 
         self._procedure_runner = procedure_runner
+        self._history_store = history_store
         self._step_delay_seconds = step_delay_seconds
         self._runs: dict[str, LiveRun] = {}
         self._state_lock = Lock()
@@ -329,6 +337,11 @@ class LiveRunManager:
                 },
             )
 
+            stored_result_id = self._store_result(
+                run,
+                result,
+            )
+
             run.publish(
                 "result",
                 {
@@ -339,6 +352,7 @@ class LiveRunManager:
                     "passed": result.passed,
                     "measurements": result.measurements,
                     "errors": result.errors,
+                    "stored_result_id": stored_result_id,
                 },
             )
 
@@ -346,10 +360,14 @@ class LiveRunManager:
                 "complete",
                 {
                     "status": result.status.value,
+                    "stored_result_id": stored_result_id,
                 },
             )
 
-            run.finish(result=result)
+            run.finish(
+                result=result,
+                stored_result_id=stored_result_id,
+            )
 
         except ProcedureRunnerError as exc:
             message = str(exc)
@@ -404,6 +422,34 @@ class LiveRunManager:
                 self._latest_completed_run_id = (
                     run.run_id
                 )
+
+    def _store_result(
+        self,
+        run: LiveRun,
+        result: ProcedureResult,
+    ) -> int:
+        stored_result = self._history_store.save_result(
+            run_id=run.run_id,
+            work_order=run.work_order,
+            serial_number=run.serial_number,
+            procedure_id=run.procedure_id,
+            procedure_name=run.procedure_name,
+            demo_mode=run.demo_mode,
+            result=result,
+        )
+
+        run.publish(
+            "history_saved",
+            {
+                "result_id": stored_result.result_id,
+                "message": (
+                    "Completed test result saved to "
+                    "persistent history."
+                ),
+            },
+        )
+
+        return stored_result.result_id
 
     @staticmethod
     def _publish_procedure_message(

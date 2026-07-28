@@ -1,20 +1,31 @@
 from __future__ import annotations
 
+from pathlib import Path
 from time import monotonic, sleep
 
+import pytest
 from flask import Flask
 
 from manufacturing_test_runner import create_app
+from manufacturing_test_runner.history_store import (
+    TestHistoryStore,
+)
 from manufacturing_test_runner.live_runs import (
     LiveRunManager,
 )
 
 
-def create_test_app() -> Flask:
+def create_test_app(
+    temporary_path: Path,
+) -> Flask:
     return create_app(
         {
             "TESTING": True,
             "SECRET_KEY": "test",
+            "HISTORY_DATABASE_PATH": (
+                temporary_path
+                / "route_test_history.sqlite3"
+            ),
         }
     )
 
@@ -47,6 +58,7 @@ def start_test_run(
     app: Flask,
     *,
     procedure_id: str = "sensor_calibration",
+    demo_mode: str = "pass",
 ) -> str:
     client = app.test_client()
 
@@ -56,6 +68,7 @@ def start_test_run(
             "work_order": "DEMO-WO-001",
             "serial_number": "DEMO-SN-001",
             "procedure_id": procedure_id,
+            "demo_mode": demo_mode,
         },
     )
 
@@ -67,8 +80,10 @@ def start_test_run(
     return run_id
 
 
-def test_setup_page_loads() -> None:
-    app = create_test_app()
+def test_setup_page_loads(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
 
     response = client.get("/")
@@ -79,8 +94,10 @@ def test_setup_page_loads() -> None:
     assert b"Controller Functional Test" in response.data
 
 
-def test_run_requires_work_order() -> None:
-    app = create_test_app()
+def test_run_requires_work_order(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
 
     response = client.post(
@@ -89,6 +106,7 @@ def test_run_requires_work_order() -> None:
             "work_order": "",
             "serial_number": "DEMO-SN-001",
             "procedure_id": "sensor_calibration",
+            "demo_mode": "pass",
         },
     )
 
@@ -96,8 +114,10 @@ def test_run_requires_work_order() -> None:
     assert b"Work order is required" in response.data
 
 
-def test_run_requires_serial_number() -> None:
-    app = create_test_app()
+def test_run_requires_serial_number(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
 
     response = client.post(
@@ -106,6 +126,7 @@ def test_run_requires_serial_number() -> None:
             "work_order": "DEMO-WO-001",
             "serial_number": "",
             "procedure_id": "sensor_calibration",
+            "demo_mode": "pass",
         },
     )
 
@@ -113,8 +134,10 @@ def test_run_requires_serial_number() -> None:
     assert b"Serial number is required" in response.data
 
 
-def test_run_requires_procedure() -> None:
-    app = create_test_app()
+def test_run_requires_procedure(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
 
     response = client.post(
@@ -123,6 +146,7 @@ def test_run_requires_procedure() -> None:
             "work_order": "DEMO-WO-001",
             "serial_number": "DEMO-SN-001",
             "procedure_id": "",
+            "demo_mode": "pass",
         },
     )
 
@@ -130,8 +154,10 @@ def test_run_requires_procedure() -> None:
     assert b"Test procedure is required" in response.data
 
 
-def test_run_redirects_to_live_result_page() -> None:
-    app = create_test_app()
+def test_run_redirects_to_live_result_page(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
 
     response = client.post(
@@ -140,6 +166,7 @@ def test_run_redirects_to_live_result_page() -> None:
             "work_order": "DEMO-WO-001",
             "serial_number": "DEMO-SN-001",
             "procedure_id": "sensor_calibration",
+            "demo_mode": "pass",
         },
     )
 
@@ -147,8 +174,10 @@ def test_run_redirects_to_live_result_page() -> None:
     assert "/runs/" in response.headers["Location"]
 
 
-def test_live_result_page_loads() -> None:
-    app = create_test_app()
+def test_live_result_page_loads(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
     run_id = start_test_run(app)
 
@@ -160,8 +189,10 @@ def test_live_result_page_loads() -> None:
     assert b"DEMO-SN-001" in response.data
 
 
-def test_live_event_stream_contains_procedure_messages() -> None:
-    app = create_test_app()
+def test_live_event_stream_contains_procedure_messages(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
     run_id = start_test_run(app)
 
@@ -179,13 +210,16 @@ def test_live_event_stream_contains_procedure_messages() -> None:
     assert "event: run_started" in body
     assert "event: procedure_message" in body
     assert "Calibration passed" in body
+    assert "event: history_saved" in body
     assert "event: result" in body
     assert '"status":"passed"' in body
     assert "event: complete" in body
 
 
-def test_controller_procedure_streams_successfully() -> None:
-    app = create_test_app()
+def test_controller_procedure_streams_successfully(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
 
     run_id = start_test_run(
@@ -207,8 +241,10 @@ def test_controller_procedure_streams_successfully() -> None:
     assert '"status":"passed"' in body
 
 
-def test_rerun_creates_new_live_run() -> None:
-    app = create_test_app()
+def test_rerun_creates_new_live_run(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
     first_run_id = start_test_run(app)
 
@@ -236,8 +272,10 @@ def test_rerun_creates_new_live_run() -> None:
     assert second_run.procedure_id == "sensor_calibration"
 
 
-def test_completed_run_cannot_be_aborted() -> None:
-    app = create_test_app()
+def test_completed_run_cannot_be_aborted(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
     run_id = start_test_run(app)
 
@@ -251,8 +289,61 @@ def test_completed_run_cannot_be_aborted() -> None:
     assert not response.get_json()["ok"]
 
 
-def test_history_page_reports_empty_state() -> None:
-    app = create_test_app()
+def test_completed_run_is_saved_to_history(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
+    run_id = start_test_run(app)
+
+    wait_for_run_completion(app, run_id)
+
+    history_store = app.extensions["history_store"]
+
+    assert isinstance(
+        history_store,
+        TestHistoryStore,
+    )
+
+    stored = history_store.get_result_by_run_id(
+        run_id
+    )
+
+    assert stored is not None
+    assert stored.work_order == "DEMO-WO-001"
+    assert stored.serial_number == "DEMO-SN-001"
+    assert stored.procedure_id == "sensor_calibration"
+    assert stored.status == "passed"
+
+
+def test_failing_run_is_saved_to_history(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
+
+    run_id = start_test_run(
+        app,
+        procedure_id="sensor_calibration",
+        demo_mode="fail",
+    )
+
+    wait_for_run_completion(app, run_id)
+
+    history_store = app.extensions["history_store"]
+
+    stored = history_store.get_result_by_run_id(
+        run_id
+    )
+
+    assert stored is not None
+    assert stored.status == "failed"
+    assert not stored.passed
+    assert stored.errors
+
+
+def test_history_page_reports_empty_state(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
 
     response = client.get("/history")
@@ -261,8 +352,10 @@ def test_history_page_reports_empty_state() -> None:
     assert b"No procedure has been executed" in response.data
 
 
-def test_history_page_reports_latest_result() -> None:
-    app = create_test_app()
+def test_history_page_reports_latest_result(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
     run_id = start_test_run(app)
 
@@ -277,8 +370,10 @@ def test_history_page_reports_latest_result() -> None:
     assert b"PASSED" in response.data
 
 
-def test_unknown_live_run_returns_not_found() -> None:
-    app = create_test_app()
+def test_unknown_live_run_returns_not_found(
+    tmp_path: Path,
+) -> None:
+    app = create_test_app(tmp_path)
     client = app.test_client()
 
     response = client.get("/runs/not-a-real-run")
