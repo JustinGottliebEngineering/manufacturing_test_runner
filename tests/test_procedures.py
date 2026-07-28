@@ -12,6 +12,14 @@ from manufacturing_test_runner.simulators.power_supply import (
     SimulatedPowerSupply,
 )
 
+from manufacturing_test_runner.procedures.controller_functional_test import (
+    ControllerFunctionalTestProcedure,
+    ControllerTestLimits,
+)
+from manufacturing_test_runner.simulators.serial_device import (
+    SimulatedSerialDevice,
+)
+
 
 def test_sensor_calibration_passes() -> None:
     procedure = SensorCalibrationProcedure(
@@ -149,3 +157,157 @@ def test_sensor_calibration_reports_setup_error() -> None:
         for error in result.errors
     )
     assert not supply.is_connected
+
+
+def test_controller_functional_test_passes() -> None:
+    procedure = ControllerFunctionalTestProcedure()
+
+    result = procedure.execute()
+
+    assert result.status == ProcedureStatus.PASSED
+    assert result.passed
+    assert result.errors == []
+    assert "MODEL-200" in result.measurements["identification"]
+    assert result.measurements["status"] == "READY"
+    assert result.measurements["self_test"] == "PASS"
+
+
+def test_controller_functional_test_detects_model_mismatch() -> None:
+    procedure = ControllerFunctionalTestProcedure(
+        limits=ControllerTestLimits(
+            expected_model="MODEL-999",
+        )
+    )
+
+    result = procedure.execute()
+
+    assert result.status == ProcedureStatus.FAILED
+    assert any(
+        "expected model MODEL-999" in error
+        for error in result.errors
+    )
+
+
+def test_controller_functional_test_detects_status_failure() -> None:
+    device = SimulatedSerialDevice(
+        responses={
+            "STATUS?": "FAULT",
+        }
+    )
+
+    procedure = ControllerFunctionalTestProcedure(
+        serial_device=device,
+    )
+
+    result = procedure.execute()
+
+    assert result.status == ProcedureStatus.FAILED
+    assert any(
+        "FAULT" in error
+        and "READY" in error
+        for error in result.errors
+    )
+
+
+def test_controller_functional_test_detects_self_test_failure() -> None:
+    device = SimulatedSerialDevice(
+        responses={
+            "SELFTEST": "FAIL",
+        }
+    )
+
+    procedure = ControllerFunctionalTestProcedure(
+        serial_device=device,
+    )
+
+    result = procedure.execute()
+
+    assert result.status == ProcedureStatus.FAILED
+    assert any(
+        "FAIL" in error
+        and "PASS" in error
+        for error in result.errors
+    )
+
+
+def test_controller_functional_test_retries_status_command() -> None:
+    device = SimulatedSerialDevice(
+        transient_failures={
+            "STATUS?": 1,
+        }
+    )
+
+    procedure = ControllerFunctionalTestProcedure(
+        serial_device=device,
+        limits=ControllerTestLimits(
+            retries=1,
+        ),
+    )
+
+    result = procedure.execute()
+
+    assert result.status == ProcedureStatus.PASSED
+    assert result.measurements["status_attempts"] == 2
+
+
+def test_controller_functional_test_reports_timeout() -> None:
+    device = SimulatedSerialDevice(
+        timeout_commands={
+            "SELFTEST",
+        }
+    )
+
+    procedure = ControllerFunctionalTestProcedure(
+        serial_device=device,
+        limits=ControllerTestLimits(
+            retries=0,
+            timeout_seconds=0.01,
+        ),
+    )
+
+    result = procedure.execute()
+
+    assert result.status == ProcedureStatus.ERROR
+    assert any(
+        "Timeout waiting for response" in error
+        for error in result.errors
+    )
+
+
+def test_controller_functional_test_releases_serial_device() -> None:
+    device = SimulatedSerialDevice()
+
+    procedure = ControllerFunctionalTestProcedure(
+        serial_device=device,
+    )
+
+    result = procedure.execute()
+
+    assert result.status == ProcedureStatus.PASSED
+    assert not device.is_connected
+
+
+def test_controller_functional_test_emits_messages() -> None:
+    received_messages: list[str] = []
+
+    procedure = ControllerFunctionalTestProcedure(
+        message_callback=lambda item: received_messages.append(
+            item.message
+        ),
+    )
+
+    result = procedure.execute()
+
+    assert result.status == ProcedureStatus.PASSED
+    assert any(
+        "Requesting controller identification" in message
+        for message in received_messages
+    )
+    assert any(
+        "Controller self-test result" in message
+        for message in received_messages
+    )
+    assert any(
+        "functional test passed" in message
+        for message in received_messages
+    )
