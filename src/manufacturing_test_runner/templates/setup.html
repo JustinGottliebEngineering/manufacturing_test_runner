@@ -19,10 +19,16 @@ Test Setup | Manufacturing Test Runner
         </div>
     {% endif %}
 
-    <form method="post" action="{{ url_for('main.run_procedure') }}">
+    <form
+        method="post"
+        action="{{ url_for('main.run_procedure') }}"
+    >
         <div class="form-grid">
             <div class="form-field">
-                <label for="work_order">Work Order</label>
+                <label for="work_order">
+                    Work Order
+                </label>
+
                 <input
                     id="work_order"
                     name="work_order"
@@ -34,7 +40,10 @@ Test Setup | Manufacturing Test Runner
             </div>
 
             <div class="form-field">
-                <label for="serial_number">Serial Number</label>
+                <label for="serial_number">
+                    Serial Number
+                </label>
+
                 <input
                     id="serial_number"
                     name="serial_number"
@@ -46,13 +55,18 @@ Test Setup | Manufacturing Test Runner
             </div>
 
             <div class="form-field form-field-wide">
-                <label for="procedure_id">Test Procedure</label>
+                <label for="procedure_id">
+                    Test Procedure
+                </label>
+
                 <select
                     id="procedure_id"
                     name="procedure_id"
                     required
                 >
-                    <option value="">Select a procedure</option>
+                    <option value="">
+                        Select a procedure
+                    </option>
 
                     {% for procedure in procedures %}
                         <option
@@ -69,9 +83,65 @@ Test Setup | Manufacturing Test Runner
                     {% endfor %}
                 </select>
             </div>
+
+            <div class="form-field form-field-wide">
+                <label for="demo_mode">
+                    Demonstration Scenario
+                </label>
+
+                <select
+                    id="demo_mode"
+                    name="demo_mode"
+                    required
+                >
+                    <option
+                        value="pass"
+                        {% if form_data.demo_mode == "pass" %}
+                            selected
+                        {% endif %}
+                    >
+                        Standard passing procedure
+                    </option>
+
+                    <option
+                        value="fail"
+                        {% if form_data.demo_mode == "fail" %}
+                            selected
+                        {% endif %}
+                    >
+                        Deliberate test failure
+                    </option>
+
+                    <option
+                        value="retry"
+                        {% if form_data.demo_mode == "retry" %}
+                            selected
+                        {% endif %}
+                    >
+                        Transient communication retry — controller only
+                    </option>
+
+                    <option
+                        value="timeout"
+                        {% if form_data.demo_mode == "timeout" %}
+                            selected
+                        {% endif %}
+                    >
+                        Communication timeout — controller only
+                    </option>
+                </select>
+
+                <small class="field-help">
+                    Retry and timeout demonstrations are available
+                    only for the Controller Functional Test.
+                </small>
+            </div>
         </div>
 
-        <button type="submit" class="button button-primary">
+        <button
+            type="submit"
+            class="button button-primary"
+        >
             Run Test Procedure
         </button>
     </form>
@@ -85,10 +155,65 @@ Test Setup | Manufacturing Test Runner
             Sensor calibration using a simulated programmable power
             supply and frequency counter
         </li>
+
         <li>
             Controller functional testing using simulated serial
             commands, retries, timeouts, and self-test responses
         </li>
+
+        <li>
+            Live server-sent event output with responsive procedure
+            abort handling
+        </li>
+
+        <li>
+            Deliberate PASS, FAIL, retry, and timeout scenarios
+        </li>
     </ul>
 </section>
+
+<script>
+(() => {
+    const procedureSelect = document.getElementById(
+        "procedure_id"
+    );
+
+    const modeSelect = document.getElementById(
+        "demo_mode"
+    );
+
+    function updateModes() {
+        const controllerSelected = (
+            procedureSelect.value
+            === "controller_functional_test"
+        );
+
+        for (const option of modeSelect.options) {
+            if (
+                option.value === "retry"
+                || option.value === "timeout"
+            ) {
+                option.disabled = !controllerSelected;
+            }
+        }
+
+        if (
+            !controllerSelected
+            && (
+                modeSelect.value === "retry"
+                || modeSelect.value === "timeout"
+            )
+        ) {
+            modeSelect.value = "pass";
+        }
+    }
+
+    procedureSelect.addEventListener(
+        "change",
+        updateModes
+    );
+
+    updateModes();
+})();
+</script>
 {% endblock %}
