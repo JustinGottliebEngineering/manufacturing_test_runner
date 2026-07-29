@@ -2,7 +2,7 @@
 
 A portfolio demonstration of a technician-facing manufacturing test application built with Python, Flask, SQLite, JavaScript, and simulated test equipment.
 
-The application models the architecture of a production test station without requiring proprietary hardware, production data, or vendor software. It executes manufacturing procedures, streams live test output to the browser, records measurements, handles failures and abort requests, and stores completed test records in a searchable SQLite history database.
+The application models the architecture of a production test station without requiring proprietary hardware, production data, or vendor software. It executes manufacturing procedures, streams live output to the browser, records measurements, handles failures and abort requests, and stores completed results in a searchable SQLite history database.
 
 ## Screenshots
 
@@ -30,37 +30,86 @@ The application models the architecture of a production test station without req
 
 Manufacturing Test Runner demonstrates how automated test software can convert a complex engineering process into a controlled and repeatable technician workflow.
 
-A technician enters a work order and serial number, selects a test procedure and demonstration scenario, and starts the test. The application then:
+A technician enters a work order and serial number, selects a procedure and demonstration scenario, and starts the test. The application then:
 
 1. Creates a uniquely identified test run.
 2. Executes the selected procedure in a worker thread.
-3. Streams procedure messages to the browser using server-sent events.
+3. Streams live procedure messages to the browser using server-sent events.
 4. Coordinates simulated instruments and serial devices.
 5. Evaluates measurements against engineering limits.
 6. Reports PASS, FAIL, ERROR, or ABORTED status.
-7. Performs instrument cleanup even when execution fails.
+7. Performs cleanup even when execution fails or is aborted.
 8. Stores the completed result in SQLite.
-9. Makes the record available through searchable test history.
+9. Makes the result available through searchable test history.
 
 ## Key Features
 
 * Technician-oriented Flask web interface
 * Live procedure output using server-sent events
 * Background test execution
-* Responsive procedure abort handling
-* Rerun support with preserved production identifiers
+* Responsive abort handling
+* Rerun support
 * Station concurrency protection
-* Configurable PASS, FAIL, retry, and timeout demonstrations
+* Configurable PASS, FAIL, retry, and timeout scenarios
 * Simulated programmable power supply
 * Simulated frequency counter
 * Simulated serial-controlled device
-* Measurement capture and engineering-limit evaluation
+* Measurement capture
+* Engineering-limit evaluation
 * Structured procedure results
 * Guaranteed resource cleanup
 * Persistent SQLite test history
 * History filtering by work order, serial number, procedure, and status
-* Detailed saved-result views
-* Automated unit, integration, route, persistence, and concurrency tests
+* Detailed stored-result views
+* Automated unit, integration, route, concurrency, and persistence tests
+
+## Demonstration Scenarios
+
+The setup page includes selectable demonstration scenarios.
+
+### Standard Passing Procedure
+
+Runs the selected procedure with valid simulated measurements and responses.
+
+Expected result:
+
+```text
+PASS
+```
+
+### Deliberate Test Failure
+
+Injects a simulated fault that causes the selected procedure to fail its engineering checks.
+
+Expected result:
+
+```text
+FAIL
+```
+
+### Transient Communication Retry
+
+Available for the Controller Functional Test.
+
+The first status command fails, the procedure retries, and communication recovers.
+
+Expected result:
+
+```text
+PASS
+```
+
+### Communication Timeout
+
+Available for the Controller Functional Test.
+
+The simulated serial device does not return a self-test response before the configured timeout.
+
+Expected result:
+
+```text
+ERROR
+```
 
 ## Demonstration Procedures
 
@@ -77,9 +126,10 @@ The procedure:
 * Measures supply voltage and current
 * Enables the frequency-counter input
 * Measures oscillator frequency
-* Calculates frequency error in hertz and parts per million
+* Calculates frequency error in hertz
+* Calculates frequency error in parts per million
 * Compares measurements against calibration limits
-* Reports the final test status
+* Reports the final procedure status
 * Disables and disconnects instruments during cleanup
 
 Available scenarios:
@@ -103,7 +153,7 @@ The procedure:
 * Supports communication retries
 * Simulates timeout behavior
 * Evaluates returned responses
-* Reports the final test status
+* Reports the final procedure status
 * Disconnects the serial device during cleanup
 
 Available scenarios:
@@ -119,9 +169,11 @@ Available scenarios:
 
 Tests execute outside the HTTP request thread.
 
-The `LiveRunManager` creates a background worker for each run and publishes structured events as the procedure progresses. The result page connects to the event endpoint using the browser `EventSource` API.
+The `LiveRunManager` creates a background worker thread for each run and publishes structured events as the procedure progresses.
 
-Event types include:
+The result page connects to the live event endpoint using the browser `EventSource` API.
+
+Published event types include:
 
 * `run_started`
 * `procedure_message`
@@ -130,23 +182,43 @@ Event types include:
 * `execution_error`
 * `complete`
 
-This design allows the interface to remain responsive while a long-running manufacturing procedure is active.
+This architecture keeps the interface responsive while a long-running manufacturing procedure is active.
 
-## Abort and Cleanup Behavior
+## Abort Behavior
 
 An active procedure can receive an abort request from the browser.
 
-Procedure delays are divided into short intervals so abort requests can be detected promptly. When an abort occurs, the procedure returns an `ABORTED` result and still executes its cleanup logic.
+Procedure delays are divided into short intervals so abort requests can be detected promptly.
 
-Cleanup behavior is also applied after:
+When an abort occurs:
+
+1. The browser submits an abort request.
+2. The live run manager forwards the request to the active procedure.
+3. The procedure detects the abort during a pause or checkpoint.
+4. The result status becomes `ABORTED`.
+5. Cleanup still runs.
+6. The completed result is stored in history.
+
+## Cleanup Behavior
+
+Cleanup is performed after:
 
 * Passing procedures
 * Failed limit evaluations
-* Communication errors
+* Communication failures
 * Instrument configuration errors
+* Abort requests
 * Unexpected exceptions
 
 This models an important manufacturing-test requirement: equipment and communication resources must not remain active after an interrupted or unsuccessful test.
+
+Examples include:
+
+* Disabling power-supply output
+* Disconnecting the power supply
+* Disabling frequency-counter input
+* Disconnecting the frequency counter
+* Closing the simulated serial connection
 
 ## Persistent Test History
 
@@ -154,6 +226,7 @@ Completed test results are stored in SQLite.
 
 Each record includes:
 
+* Result ID
 * Run ID
 * Work order
 * Serial number
@@ -173,7 +246,7 @@ The history page supports filtering by:
 * Procedure
 * Final status
 
-Measurements and errors are serialized as JSON so procedure-specific data can be stored without requiring a separate database schema for each procedure.
+Measurements and errors are serialized as JSON so procedure-specific data can be stored without requiring a separate schema for every procedure.
 
 ## Architecture
 
@@ -187,14 +260,16 @@ Flask Routes
    +--> LiveRunManager
    |       |
    |       +--> Background worker thread
-   |       |
    |       +--> Server-sent event queue
+   |       +--> Active run tracking
+   |       +--> Abort forwarding
    |
    +--> ProcedureRunner
    |       |
    |       +--> Station execution lock
    |       +--> Active procedure tracking
-   |       +--> Abort forwarding
+   |       +--> Procedure selection
+   |       +--> Rerun support
    |
    +--> Manufacturing Procedures
    |       |
@@ -216,9 +291,16 @@ Flask Routes
 
 ```text
 manufacturing_test_runner/
-├── run.py
 ├── README.md
 ├── pyproject.toml
+├── run.py
+├── docs/
+│   └── screenshots/
+│       ├── failed-test.png
+│       ├── history-detail.png
+│       ├── live-passing-test.png
+│       ├── test-history.png
+│       └── test-setup.png
 ├── src/
 │   └── manufacturing_test_runner/
 │       ├── __init__.py
@@ -227,10 +309,12 @@ manufacturing_test_runner/
 │       ├── routes.py
 │       ├── runner.py
 │       ├── procedures/
+│       │   ├── __init__.py
 │       │   ├── base.py
 │       │   ├── controller_functional_test.py
 │       │   └── sensor_calibration.py
 │       ├── simulators/
+│       │   ├── __init__.py
 │       │   ├── base.py
 │       │   ├── frequency_counter.py
 │       │   ├── power_supply.py
@@ -254,17 +338,18 @@ manufacturing_test_runner/
 
 ## Technology Stack
 
-| Technology         | Purpose                                            |
-| ------------------ | -------------------------------------------------- |
-| Python             | Application, procedure, and simulator logic        |
-| Flask              | Web application and HTTP routing                   |
-| SQLite             | Persistent test-result storage                     |
-| HTML and CSS       | Technician-facing interface                        |
-| JavaScript         | Live result updates and abort requests             |
-| Server-Sent Events | One-way live procedure streaming                   |
-| Threading          | Background procedure execution and station locking |
-| Pytest             | Automated testing                                  |
-| GitHub Actions     | Continuous integration                             |
+| Technology         | Purpose                                     |
+| ------------------ | ------------------------------------------- |
+| Python             | Application, simulator, and procedure logic |
+| Flask              | Web application and HTTP routing            |
+| SQLite             | Persistent test-result storage              |
+| HTML               | Technician-facing page structure            |
+| CSS                | Interface styling                           |
+| JavaScript         | Live result updates and abort requests      |
+| Server-Sent Events | One-way live procedure streaming            |
+| Threading          | Background execution and station locking    |
+| Pytest             | Automated testing                           |
+| GitHub Actions     | Continuous integration                      |
 
 ## Local Setup
 
@@ -281,7 +366,7 @@ cd manufacturing_test_runner
 python -m venv .venv
 ```
 
-### 3. Activate the environment
+### 3. Activate the virtual environment
 
 ```powershell
 .\.venv\Scripts\Activate.ps1
@@ -300,7 +385,11 @@ python -m pip install -e ".[dev]"
 python -m pytest -v
 ```
 
-The current test suite contains 70 passing tests covering simulator behavior, procedure execution, concurrency protection, live routes, persistent history, filtering, and error handling.
+Current result:
+
+```text
+70 passed
+```
 
 ### 6. Start the application
 
@@ -308,7 +397,7 @@ The current test suite contains 70 passing tests covering simulator behavior, pr
 python .\run.py
 ```
 
-Open the application at:
+Open:
 
 ```text
 http://127.0.0.1:5000
@@ -316,38 +405,54 @@ http://127.0.0.1:5000
 
 ## Suggested Demonstration
 
-For a complete application demonstration:
+For a complete application walkthrough:
 
-1. Run Sensor Module Calibration in passing mode.
-2. Review the live console and recorded measurements.
-3. Rerun the procedure.
-4. Run Sensor Module Calibration in deliberate-failure mode.
-5. Run Controller Functional Test in retry mode.
-6. Run Controller Functional Test in timeout mode.
-7. Start a timed procedure and use the abort button.
-8. Open Test History.
-9. Filter results by procedure and final status.
-10. Open an individual stored result.
+1. Open the Test Setup page.
+2. Enter a fictional work order.
+3. Enter a fictional serial number.
+4. Select Sensor Module Calibration.
+5. Select Standard passing procedure.
+6. Run the procedure.
+7. Observe the live console output.
+8. Review the recorded measurements.
+9. Rerun the procedure.
+10. Return to Test Setup.
+11. Select Deliberate test failure.
+12. Run the procedure and observe the FAIL result.
+13. Select Controller Functional Test.
+14. Select Transient communication retry.
+15. Observe the retry and recovery.
+16. Run the Communication timeout scenario.
+17. Start another procedure and press Abort Procedure.
+18. Open Test History.
+19. Filter by procedure and status.
+20. Open an individual stored result.
 
 ## Automated Testing
 
 The test suite covers:
 
 * Simulator connection enforcement
-* Power-supply configuration and measurement
-* Frequency-counter measurement and forced readings
+* Power-supply configuration
+* Power-supply measurement
+* Excessive voltage rejection
+* Frequency-counter measurements
+* Forced frequency readings
+* Frequency input validation
 * Serial command normalization
 * Unsupported serial commands
 * Transient communication failures
 * Retry exhaustion
 * Communication timeouts
-* Procedure PASS and FAIL decisions
+* Procedure PASS decisions
+* Procedure FAIL decisions
+* Procedure ERROR handling
 * Procedure message callbacks
 * Instrument cleanup
-* Procedure setup errors
-* Runner procedure selection
+* Setup errors
+* Procedure selection
 * Station concurrency protection
-* Abort behavior
+* Abort requests
 * Rerun behavior
 * Flask form validation
 * Live result pages
@@ -356,7 +461,8 @@ The test suite covers:
 * Duplicate run protection
 * History filtering
 * Stored-result retrieval
-* Unknown run and history-record handling
+* Unknown run handling
+* Unknown history-record handling
 
 Run the suite with:
 
@@ -366,26 +472,30 @@ python -m pytest -v
 
 ## Continuous Integration
 
-The repository is intended to run the automated test suite through GitHub Actions for every push and pull request.
+The repository is configured to run automated tests through GitHub Actions.
 
-This provides immediate verification that changes do not break:
+The workflow verifies the application on pushes and pull requests.
+
+Continuous integration protects:
 
 * Procedure logic
 * Equipment simulators
 * Flask routes
 * Live execution
+* Concurrency behavior
 * Persistence
-* Test-history filtering
+* History filtering
 
 ## Engineering Concepts Demonstrated
 
-This project demonstrates several patterns used in real manufacturing test systems:
+This project demonstrates patterns used in manufacturing test systems:
 
 * Separation of web, orchestration, procedure, and equipment layers
 * Abstract equipment interfaces
 * Deterministic hardware simulation
 * Procedure-specific measurement limits
-* Resource ownership and cleanup
+* Resource ownership
+* Guaranteed cleanup
 * Background execution
 * Live technician feedback
 * Cooperative cancellation
@@ -417,13 +527,14 @@ Potential future additions include:
 
 * CSV result export
 * PDF test reports
-* User authentication and technician identification
+* Technician authentication
 * Role-based access
 * Procedure revision tracking
-* Configurable limits stored in the database
+* Configurable database-backed limits
 * Barcode-scanner input
-* Equipment calibration status
+* Equipment calibration status tracking
 * REST API endpoints
-* WebSocket-based bidirectional communication
+* Bidirectional WebSocket communication
 * Production deployment configuration
-* Additional simulated instruments and test procedures
+* Additional simulated instruments
+* Additional manufacturing procedures
