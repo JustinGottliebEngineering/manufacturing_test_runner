@@ -4,6 +4,28 @@ A portfolio demonstration of a technician-facing manufacturing test application 
 
 The application models the architecture of a production test station without requiring proprietary hardware, production data, or vendor software. It executes manufacturing procedures, streams live test output to the browser, records measurements, handles failures and abort requests, and stores completed test records in a searchable SQLite history database.
 
+## Screenshots
+
+### Test Setup
+
+![Test setup](docs/screenshots/test-setup.png)
+
+### Live Procedure Execution
+
+![Live passing test](docs/screenshots/live-passing-test.png)
+
+### Failed Test Result
+
+![Failed test](docs/screenshots/failed-test.png)
+
+### Persistent Test History
+
+![Test history](docs/screenshots/test-history.png)
+
+### Stored Result Detail
+
+![History detail](docs/screenshots/history-detail.png)
+
 ## Application Overview
 
 Manufacturing Test Runner demonstrates how automated test software can convert a complex engineering process into a controlled and repeatable technician workflow.
